@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dealer Evaluation - Comparateur de prix</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    max-width: 600px;
+    margin: 40px auto;
+    padding: 0 20px;
+    background: #f5f5f5;
+  }
+  h1 {
+    font-size: 22px;
+    color: #222;
+  }
+  label {
+    display: block;
+    margin-top: 20px;
+    font-weight: bold;
+  }
+  select {
+    width: 100%;
+    padding: 8px;
+    margin-top: 6px;
+    font-size: 15px;
+  }
+  #results {
+    margin-top: 25px;
+    background: white;
+    border-radius: 6px;
+    padding: 15px;
+    min-height: 40px;
+  }
+  .price-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid #eee;
+  }
+  .price-row:last-child {
+    border-bottom: none;
+  }
+</style>
+</head>
+<body>
+
+<h1>Comparateur de prix concessionnaires</h1>
+
+<label for="product-select">Produit</label>
+<select id="product-select">
+  <option value="">-- Choisir un produit --</option>
+</select>
+
+<label for="dealer-select">Distributeur</label>
+<select id="dealer-select" disabled>
+  <option value="">-- Choisir un produit d'abord --</option>
+</select>
+
+<div id="results"></div>
+
+<script>
+  // ==== PLACEHOLDERS À REMPLACER (TASK 4) ====
+  // Remplace ces deux valeurs par les vraies URLs publiques de tes microservices déployés sur Code Engine.
+  const PRODUCT_SERVICE_URL = "REPLACE_WITH_PRODUCT_SERVICE_URL";
+  const DEALER_PRICE_SERVICE_URL = "REPLACE_WITH_DEALER_PRICE_SERVICE_URL";
+  // ============================================
+
+  const productSelect = document.getElementById("product-select");
+  const dealerSelect = document.getElementById("dealer-select");
+  const resultsDiv = document.getElementById("results");
+
+  // Charge la liste des produits au démarrage de la page (TASK 6)
+  async function loadProducts() {
+    try {
+      const res = await fetch(`${PRODUCT_SERVICE_URL}/products`);
+      const products = await res.json();
+      products.forEach((p) => {
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = p.name;
+        productSelect.appendChild(opt);
+      });
+    } catch (err) {
+      resultsDiv.textContent = "Erreur : impossible de charger les produits.";
+      console.error(err);
+    }
+  }
+
+  // Quand un produit est sélectionné, charge ses distributeurs (TASK 7)
+  productSelect.addEventListener("change", async () => {
+    const productId = productSelect.value;
+    resultsDiv.innerHTML = "";
+    dealerSelect.innerHTML = "";
+    dealerSelect.disabled = true;
+
+    if (!productId) {
+      dealerSelect.innerHTML = '<option value="">-- Choisir un produit d\'abord --</option>';
+      return;
+    }
+
+    try {
+      const res = await fetch(`${PRODUCT_SERVICE_URL}/products/${productId}/dealers`);
+      const dealers = await res.json();
+
+      const defaultOpt = document.createElement("option");
+      defaultOpt.value = "";
+      defaultOpt.textContent = "-- Choisir un distributeur --";
+      dealerSelect.appendChild(defaultOpt);
+
+      const allOpt = document.createElement("option");
+      allOpt.value = "all";
+      allOpt.textContent = "Tous les distributeurs";
+      dealerSelect.appendChild(allOpt);
+
+      dealers.forEach((d) => {
+        const opt = document.createElement("option");
+        opt.value = d.id;
+        opt.textContent = d.name;
+        dealerSelect.appendChild(opt);
+      });
+
+      dealerSelect.disabled = false;
+    } catch (err) {
+      resultsDiv.textContent = "Erreur : impossible de charger les distributeurs.";
+      console.error(err);
+    }
+  });
+
+  // Quand un distributeur (ou "Tous") est sélectionné, affiche le(s) prix (TASK 8 & 9)
+  dealerSelect.addEventListener("change", async () => {
+    const productId = productSelect.value;
+    const dealerId = dealerSelect.value;
+    resultsDiv.innerHTML = "";
+
+    if (!dealerId) return;
+
+    try {
+      if (dealerId === "all") {
+        // TASK 9 : prix de tous les distributeurs
+        const res = await fetch(`${DEALER_PRICE_SERVICE_URL}/price/all/${productId}`);
+        const allPrices = await res.json();
+
+        // Récupère les noms des distributeurs pour un affichage plus lisible
+        const dealersRes = await fetch(`${PRODUCT_SERVICE_URL}/products/${productId}/dealers`);
+        const dealersList = await dealersRes.json();
+        const nameById = Object.fromEntries(dealersList.map((d) => [d.id, d.name]));
+
+        allPrices.forEach((entry) => {
+          const row = document.createElement("div");
+          row.className = "price-row";
+          row.innerHTML = `<span>${nameById[entry.dealerId] || "Distributeur " + entry.dealerId}</span><span>${entry.price} €</span>`;
+          resultsDiv.appendChild(row);
+        });
+      } else {
+        // TASK 8 : prix d'un seul distributeur
+        const res = await fetch(`${DEALER_PRICE_SERVICE_URL}/price/${dealerId}/${productId}`);
+        const data = await res.json();
+        const row = document.createElement("div");
+        row.className = "price-row";
+        row.innerHTML = `<span>Prix proposé</span><span>${data.price} €</span>`;
+        resultsDiv.appendChild(row);
+      }
+    } catch (err) {
+      resultsDiv.textContent = "Erreur : impossible de charger le(s) prix.";
+      console.error(err);
+    }
+  });
+
+  loadProducts();
+</script>
+
+</body>
+</html>
